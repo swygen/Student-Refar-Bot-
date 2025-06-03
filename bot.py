@@ -1,23 +1,35 @@
 import json
-from aiogram import Bot, Dispatcher, types, executor
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from keep_alive import keep_alive
-from datetime import datetime
+import asyncio
 import os
+from datetime import datetime
+from aiogram import Bot, Dispatcher, types
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.utils import executor
+from keep_alive import keep_alive  # যদি Replit বা অনলাইন সার্ভারে চালাও
 
-TOKEN = "8147835055:AAH9L0JFtwZLPx6mJ37eyxnDUxM49bgnfm8"
-ADMIN_ID = 7647930808  # Replace with your Telegram user ID
+# 🔐 Bot Configuration
+TOKEN = "8147835055:AAH9L0JFtwZLPx6mJ37eyxnDUxM49bgnfm8"  # <-- এখানেই তোমার BotFather থেকে পাওয়া টোকেন বসাও
+ADMIN_ID = 7647930808  # <-- তোমার Telegram ID
 GROUP_IDS = ['-1002414769217', '-1002676258756', '-1002657235869']
 
+# 🤖 Initialize Bot and Dispatcher
 bot = Bot(token=TOKEN)
 dp = Dispatcher(bot)
 
+# 📁 Database
+DB_FILE = "database.json"
+
 def load_db():
-    with open("database.json", "r") as f:
-        return json.load(f)
+    if not os.path.exists(DB_FILE):
+        return {"users": {}, "claimed_100": []}
+    try:
+        with open(DB_FILE, "r") as f:
+            return json.load(f)
+    except json.JSONDecodeError:
+        return {"users": {}, "claimed_100": []}
 
 def save_db(data):
-    with open("database.json", "w") as f:
+    with open(DB_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
 def get_referral_link(user_id):
@@ -25,8 +37,7 @@ def get_referral_link(user_id):
 
 def user_profile(uid, data):
     u = data["users"].get(str(uid), {})
-    return f"""
-👤 নাম: {u.get("name")}
+    return f"""👤 নাম: {u.get("name")}
 🆔 ইউজার আইডি: {uid}
 💰 ব্যালেন্স: {u.get("balance", 0)} টাকা
 📅 জয়েন তারিখ: {u.get("joined")}
@@ -64,7 +75,7 @@ async def check_groups(call: types.CallbackQuery):
             member = await bot.get_chat_member(gid, user_id)
             if member.status not in ["member", "administrator", "creator"]:
                 raise Exception()
-        # Show main menu
+
         keyboard = InlineKeyboardMarkup(row_width=2).add(
             InlineKeyboardButton("প্রোফাইল", callback_data="profile"),
             InlineKeyboardButton("রেফার করুন", callback_data="refer"),
@@ -88,14 +99,11 @@ async def refer(call: types.CallbackQuery):
     uid = str(call.from_user.id)
     u = data["users"][uid]
     link = get_referral_link(uid)
-    await call.message.edit_text(f"""
-📣 বন্ধুদের রেফার করুন এবং প্রতি সফল রেফারে ৫০ টাকা ইনকাম করুন!
+    await call.message.edit_text(f"""📣 বন্ধুদের রেফার করুন এবং প্রতি সফল রেফারে ৫০ টাকা ইনকাম করুন!
 
-🔗 আপনার রেফার লিংক:
-{link}
+🔗 আপনার রেফার লিংক: {link}
 
-✅ মোট সফল রেফার: {u.get('referrals', 0)}
-""")
+✅ মোট সফল রেফার: {u.get('referrals', 0)} """)
 
 @dp.callback_query_handler(lambda c: c.data == "withdraw")
 async def withdraw(call: types.CallbackQuery):
@@ -107,7 +115,8 @@ async def withdraw(call: types.CallbackQuery):
         await call.message.edit_text("❗ উত্তোলনের জন্য ন্যূনতম ২০টি সফল রেফার প্রয়োজন।")
     else:
         await call.message.answer("💳 আপনার বিকাশ/নগদ নম্বর পাঠান:")
-        @dp.message_handler()
+
+        @dp.message_handler(lambda message: message.chat.id == call.from_user.id)
         async def get_number(msg: types.Message):
             data = load_db()
             u = data["users"][uid]
@@ -115,7 +124,6 @@ async def withdraw(call: types.CallbackQuery):
             u["balance"] = 0
             save_db(data)
             await msg.answer("✅ উত্তোলন রিকোয়েস্ট সফলভাবে গ্রহণ করা হয়েছে।")
-            return
 
 @dp.callback_query_handler(lambda c: c.data == "notice")
 async def notice(call: types.CallbackQuery):
@@ -139,7 +147,10 @@ async def free100(call: types.CallbackQuery):
         InlineKeyboardButton("✅ Submit", callback_data="submit100")
     )
     await bot.send_photo(chat_id=call.from_user.id, photo=img_url)
-    await call.message.answer("🔔 সতর্কবার্তা 🔔\nদয়া করে প্রথমে \"Go To Web\" এ গিয়ে একটি বৈধ একাউন্ট খুলুন এবং তারপরই তথ্য Submit করুন।", reply_markup=keyboard)
+    await call.message.answer("""
+🔔 সতর্কবার্তা 🔔
+দয়া করে প্রথমে "Go To Web" এ গিয়ে একটি বৈধ একাউন্ট খুলুন এবং তারপরই তথ্য Submit করুন। ✅ অনুগ্রহ করে নিয়ম মেনে চলুন।
+""", reply_markup=keyboard)
 
 @dp.callback_query_handler(lambda c: c.data == "submit100")
 async def submit100(call: types.CallbackQuery):
@@ -153,6 +164,14 @@ async def submit100(call: types.CallbackQuery):
     save_db(data)
     await call.message.edit_text("✅ সফলভাবে ৫০ টাকা আপনার একাউন্টে যোগ হয়েছে।")
 
+# ✅ Start Bot
 if __name__ == "__main__":
-    keep_alive()
-    executor.start_polling(dp)
+    keep_alive()  # Replit/online hosting support (must be defined in keep_alive.py)
+    loop = asyncio.get_event_loop()
+
+    async def main():
+        print("🤖 Bot is starting...")
+        await dp.start_polling()
+
+    loop.create_task(main())
+    loop.run_forever()
