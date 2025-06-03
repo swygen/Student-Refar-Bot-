@@ -7,7 +7,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from keep_alive import keep_alive  # Flask সার্ভার চালানোর জন্য
 
 # ==== Bot Config ====
-TOKEN = "8067498359:AAEwY3O6A2CVueEm4LKSIaMp4F__ypL6ZdI"  # এখানে তোমার BotFather token বসাও
+TOKEN = "7627130832:AAF-09sxinEObzwlbMRMHALpW_x4EOsFS2w"  # এখানে তোমার BotFather token বসাও
 ADMIN_ID = 7647930808  # তোমার Telegram ID (যেখানে উত্তোলন মেসেজ যাবে)
 GROUP_IDS = ['-1002414769217', '-1002676258756', '-1002657235869']
 
