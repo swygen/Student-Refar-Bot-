@@ -5,22 +5,30 @@ from datetime import datetime
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from keep_alive import keep_alive  # Uptime server (like Replit)
+from keep_alive import keep_alive  # Uptime server (যদি ব্যবহার করো)
 
 # ==== Bot Configuration ====
-TOKEN = "7326530944:AAEj883zJaEfC1uj0B3UelL9Y9Q0_WAxy3Y"  # Replace with actual bot token
-ADMIN_ID = 7647930808  # Replace with your Telegram ID
+TOKEN = "7581535746:AAEAe2dhpkVdfaJnDVS526hFRAGL0rLf3vI"  # তোমার বট টোকেন বসাও
+ADMIN_ID = 7647930808  # তোমার টেলিগ্রাম আইডি বসাও
 
 GROUPS = {
-    "Join 1": "https://t.me/CashShortcutBD",
-    "Join 2": "https://t.me/EarningZone0BD",
-    "Join 3": "https://t.me/EarnopediaBD"
+    "CashShortcutBD": "https://t.me/CashShortcutBD",
+    "EarningZone0BD": "https://t.me/EarningZone0BD",
+    "EarnopediaBD": "https://t.me/EarnopediaBD"
 }
+
 GROUP_IDS = [
     "-1002676258756",
     "-1002657235869",
     "-1002414769217"
-]  # Replace with actual group/channel IDs
+]
+
+# গ্রুপ আইডি ও নাম ম্যাপ (গ্রুপ যাচাইয়ের সময় ব্যবহার হবে)
+GROUP_MAP = {
+    "-1002676258756": "CashShortcutBD",
+    "-1002657235869": "EarningZone0BD",
+    "-1002414769217": "EarnopediaBD"
+}
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher(bot)
@@ -45,10 +53,10 @@ def get_referral_link(user_id):
 
 def format_profile(uid, data):
     u = data["users"].get(str(uid), {})
-    return f"""👤 নাম: {u.get("name")}
+    return f"""👤 নাম: {u.get("name", "অজানা")}
 🆔 ইউজার আইডি: {uid}
 💰 ব্যালেন্স: {u.get("balance", 0)} টাকা
-📅 জয়েন তারিখ: {u.get("joined")}"""
+📅 জয়েন তারিখ: {u.get("joined", "N/A")}"""
 
 # ==== Bot Commands ====
 @dp.message_handler(commands=['start'])
@@ -79,12 +87,23 @@ async def start_command(msg: types.Message):
 @dp.callback_query_handler(lambda c: c.data == "check_groups")
 async def check_groups(call: types.CallbackQuery):
     user_id = call.from_user.id
-    try:
-        for gid in GROUP_IDS:
+    not_joined_groups = []
+
+    for gid in GROUP_IDS:
+        try:
             member = await bot.get_chat_member(gid, user_id)
             if member.status not in ["member", "administrator", "creator"]:
-                raise Exception()
+                not_joined_groups.append(gid)
+        except Exception:
+            not_joined_groups.append(gid)
 
+    if not_joined_groups:
+        groups_names = [GROUP_MAP.get(gid, "অজানা গ্রুপ") for gid in not_joined_groups]
+        await call.message.edit_text(
+            "❌ অনুগ্রহ করে নিচের সবগুলো গ্রুপে জয়েন করুন এবং পুনরায় চেষ্টা করুন:\n" +
+            "\n".join(f"• {name}" for name in groups_names)
+        )
+    else:
         keyboard = InlineKeyboardMarkup(row_width=2).add(
             InlineKeyboardButton("📄 প্রোফাইল", callback_data="profile"),
             InlineKeyboardButton("📣 রেফার", callback_data="refer"),
@@ -94,8 +113,6 @@ async def check_groups(call: types.CallbackQuery):
             InlineKeyboardButton("🆘 সাপোর্ট", callback_data="support")
         )
         await call.message.edit_text("✅ সফলভাবে যুক্ত হয়েছেন! মেনু থেকে অপশন বেছে নিন:", reply_markup=keyboard)
-    except:
-        await call.message.edit_text("❌ অনুগ্রহ করে সবগুলো গ্রুপে যুক্ত হন এবং পুনরায় চেষ্টা করুন।")
 
 @dp.callback_query_handler(lambda c: c.data == "profile")
 async def profile(call: types.CallbackQuery):
@@ -129,7 +146,10 @@ async def handle_number(msg: types.Message):
     if user_withdraw_state.get(uid):
         data = load_db()
         user = data["users"][uid]
-        await bot.send_message(ADMIN_ID, f"📤 উত্তোলন রিকোয়েস্ট\nনাম: {msg.from_user.full_name}\nID: {uid}\nনম্বর: {msg.text}\nপরিমাণ: {user['balance']} টাকা")
+        await bot.send_message(
+            ADMIN_ID,
+            f"📤 উত্তোলন রিকোয়েস্ট\nনাম: {msg.from_user.full_name}\nID: {uid}\nনম্বর: {msg.text}\nপরিমাণ: {user['balance']} টাকা"
+        )
         user["balance"] = 0
         save_db(data)
         await msg.answer("✅ রিকোয়েস্ট গ্রহণ করা হয়েছে।")
@@ -172,7 +192,7 @@ async def submit100(call: types.CallbackQuery):
 
 # ==== Start Bot ====
 if __name__ == "__main__":
-    keep_alive()
+    keep_alive()  # যদি রেপ্লিট বা অন্য সার্ভার ইউজ করো, না হলে বাদ দিও
 
     loop = asyncio.get_event_loop()
 
