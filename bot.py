@@ -2,21 +2,31 @@ import json
 import asyncio
 import os
 from datetime import datetime
+
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from keep_alive import keep_alive
+from keep_alive import keep_alive  # Uptime server (like Replit)
 
-# ==== Bot Config ====
-TOKEN = "7627130832:AAF-09sxinEObzwlbMRMHALpW_x4EOsFS2w"
-ADMIN_ID = 7647930808  # Admin user ID
-GROUP_IDS = ['-1002414769217', '-1002676258756', '-1002657235869']  # Replace with your group IDs
+# ==== Bot Configuration ====
+TOKEN = "7326530944:AAEj883zJaEfC1uj0B3UelL9Y9Q0_WAxy3Y"  # Replace with actual bot token
+ADMIN_ID = 7647930808  # Replace with your Telegram ID
+
+GROUPS = {
+    "Join 1": "https://t.me/CashShortcutBD",
+    "Join 2": "https://t.me/EarningZone0BD",
+    "Join 3": "https://t.me/EarnopediaBD"
+}
+GROUP_IDS = [
+    "-1002676258756",
+    "-1002657235869",
+    "-1002414769217"
+]  # Replace with actual group/channel IDs
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher(bot)
-
 DB_FILE = "database.json"
 
-# === Database Handling ===
+# ==== Database Operations ====
 def load_db():
     if not os.path.exists(DB_FILE):
         return {"users": {}, "claimed_100": []}
@@ -33,17 +43,16 @@ def save_db(data):
 def get_referral_link(user_id):
     return f"https://t.me/Student_refer_bot?start={user_id}"
 
-def user_profile(uid, data):
+def format_profile(uid, data):
     u = data["users"].get(str(uid), {})
     return f"""👤 নাম: {u.get("name")}
 🆔 ইউজার আইডি: {uid}
 💰 ব্যালেন্স: {u.get("balance", 0)} টাকা
-📅 জয়েন তারিখ: {u.get("joined")}
-"""
+📅 জয়েন তারিখ: {u.get("joined")}"""
 
-# === Commands ===
+# ==== Bot Commands ====
 @dp.message_handler(commands=['start'])
-async def start_cmd(msg: types.Message):
+async def start_command(msg: types.Message):
     uid = str(msg.from_user.id)
     data = load_db()
 
@@ -61,12 +70,12 @@ async def start_cmd(msg: types.Message):
         }
         save_db(data)
 
-    keyboard = InlineKeyboardMarkup().add(
-        InlineKeyboardButton("✅ Join Check", callback_data="check_groups")
-    )
-    await msg.answer("🎉 স্বাগতম! অনুগ্রহ করে নিচের গ্রুপগুলোতে যুক্ত হন:", reply_markup=keyboard)
+    buttons = [InlineKeyboardButton(text=name, url=url) for name, url in GROUPS.items()]
+    buttons.append(InlineKeyboardButton("✅ Continue 🟢", callback_data="check_groups"))
+    keyboard = InlineKeyboardMarkup(row_width=1).add(*buttons)
 
-# === Group Join Check ===
+    await msg.answer("🔰 প্রথমে নিচের গ্রুপগুলোতে যোগ দিন:", reply_markup=keyboard)
+
 @dp.callback_query_handler(lambda c: c.data == "check_groups")
 async def check_groups(call: types.CallbackQuery):
     user_id = call.from_user.id
@@ -75,6 +84,7 @@ async def check_groups(call: types.CallbackQuery):
             member = await bot.get_chat_member(gid, user_id)
             if member.status not in ["member", "administrator", "creator"]:
                 raise Exception()
+
         keyboard = InlineKeyboardMarkup(row_width=2).add(
             InlineKeyboardButton("📄 প্রোফাইল", callback_data="profile"),
             InlineKeyboardButton("📣 রেফার", callback_data="refer"),
@@ -83,88 +93,87 @@ async def check_groups(call: types.CallbackQuery):
             InlineKeyboardButton("📢 নোটিশ", callback_data="notice"),
             InlineKeyboardButton("🆘 সাপোর্ট", callback_data="support")
         )
-        await call.message.edit_text("✅ সব গ্রুপে যুক্ত হয়েছেন!", reply_markup=keyboard)
+        await call.message.edit_text("✅ সফলভাবে যুক্ত হয়েছেন! মেনু থেকে অপশন বেছে নিন:", reply_markup=keyboard)
     except:
-        await call.message.edit_text("❗ অনুগ্রহ করে সব গ্রুপে যুক্ত হন ও আবার চেষ্টা করুন।")
+        await call.message.edit_text("❌ অনুগ্রহ করে সবগুলো গ্রুপে যুক্ত হন এবং পুনরায় চেষ্টা করুন।")
 
-# === Callback Handlers ===
 @dp.callback_query_handler(lambda c: c.data == "profile")
 async def profile(call: types.CallbackQuery):
     data = load_db()
-    await call.message.edit_text(user_profile(call.from_user.id, data))
+    await call.message.edit_text(format_profile(call.from_user.id, data))
 
 @dp.callback_query_handler(lambda c: c.data == "refer")
 async def refer(call: types.CallbackQuery):
     data = load_db()
     uid = str(call.from_user.id)
-    u = data["users"][uid]
     link = get_referral_link(uid)
-    await call.message.edit_text(f"""📣 বন্ধুদের রেফার করুন!
-
-🔗 আপনার রেফার লিংক: {link}
-✅ সফল রেফার: {u.get('referrals', 0)}""")
+    referrals = data["users"][uid].get("referrals", 0)
+    await call.message.edit_text(f"📣 রেফার লিংক: 🔗 {link}\n✅ সফল রেফার: {referrals}")
 
 user_withdraw_state = {}
 
 @dp.callback_query_handler(lambda c: c.data == "withdraw")
 async def withdraw(call: types.CallbackQuery):
-    data = load_db()
     uid = str(call.from_user.id)
-    u = data["users"][uid]
-    if u.get("referrals", 0) < 20:
-        await call.message.edit_text("❗ উত্তোলনের জন্য কমপক্ষে ২০টি রেফার প্রয়োজন।")
+    data = load_db()
+    user = data["users"].get(uid, {})
+    if user.get("referrals", 0) < 20:
+        await call.message.edit_text("❗ উত্তোলনের জন্য অন্তত ২০টি রেফার লাগবে।")
     else:
-        await call.message.answer("📥 বিকাশ/নগদ নম্বর পাঠান:")
+        await call.message.answer("📥 আপনার বিকাশ/নগদ নম্বর পাঠান:")
         user_withdraw_state[uid] = True
 
 @dp.message_handler()
-async def handle_withdraw_number(msg: types.Message):
+async def handle_number(msg: types.Message):
     uid = str(msg.from_user.id)
     if user_withdraw_state.get(uid):
         data = load_db()
-        u = data["users"][uid]
-        await bot.send_message(ADMIN_ID, f"📥 উত্তোলন:\nনাম: {msg.from_user.full_name}\nID: {uid}\nNumber: {msg.text}\nAmount: {u['balance']} টাকা")
-        u["balance"] = 0
+        user = data["users"][uid]
+        await bot.send_message(ADMIN_ID, f"📤 উত্তোলন রিকোয়েস্ট\nনাম: {msg.from_user.full_name}\nID: {uid}\nনম্বর: {msg.text}\nপরিমাণ: {user['balance']} টাকা")
+        user["balance"] = 0
         save_db(data)
-        await msg.answer("✅ রিকোয়েস্ট গ্রহণ করা হয়েছে।")
+        await msg.answer("✅ রিকোয়েস্ট গ্রহণ করা হয়েছে।")
         user_withdraw_state.pop(uid)
 
 @dp.callback_query_handler(lambda c: c.data == "notice")
 async def notice(call: types.CallbackQuery):
-    await call.message.edit_text("📢 সব নিয়ম মেনে কাজ করুন।")
+    await call.message.edit_text("📌 নিয়মিতভাবে গ্রুপগুলোতে সক্রিয় থাকুন।")
 
 @dp.callback_query_handler(lambda c: c.data == "support")
 async def support(call: types.CallbackQuery):
-    await call.message.edit_text("🆘 Admin: @YourSupportUsername")
+    await call.message.edit_text("🆘 সাপোর্টের জন্য যোগাযোগ করুন: @YourSupportUsername")
 
 @dp.callback_query_handler(lambda c: c.data == "free100")
 async def free100(call: types.CallbackQuery):
     data = load_db()
     uid = str(call.from_user.id)
     if uid in data["claimed_100"]:
-        await call.message.edit_text("❌ আপনি আগে এই অফার নিয়েছেন।")
+        await call.message.edit_text("❌ আপনি এই অফারটি ইতিমধ্যে গ্রহণ করেছেন।")
         return
+
     keyboard = InlineKeyboardMarkup().add(
-        InlineKeyboardButton("🌐 Go To Web", url="https://yourwebsite.com"),
+        InlineKeyboardButton("🌐 Visit Website", url="http://invest-sure.netlify.app"),
         InlineKeyboardButton("✅ Submit", callback_data="submit100")
     )
-    await call.message.answer("🎁 অফার পেতে ওয়েবসাইটে একাউন্ট খুলে Submit দিন।", reply_markup=keyboard)
+    await call.message.answer("🎁 ওয়েবসাইটে গিয়ে রেজিস্ট্রেশন সম্পন্ন করে Submit দিন:", reply_markup=keyboard)
 
 @dp.callback_query_handler(lambda c: c.data == "submit100")
 async def submit100(call: types.CallbackQuery):
     data = load_db()
     uid = str(call.from_user.id)
     if uid in data["claimed_100"]:
-        await call.message.edit_text("❌ আপনি আগে ক্লেইম করেছেন।")
+        await call.message.edit_text("❌ আপনি ইতিমধ্যে ক্লেইম করেছেন।")
         return
+
     data["claimed_100"].append(uid)
     data["users"][uid]["balance"] += 50
     save_db(data)
-    await call.message.edit_text("✅ ৫০ টাকা আপনার ব্যালেন্সে যোগ হয়েছে।")
+    await call.message.edit_text("✅ ৫০ টাকা ব্যালেন্সে যোগ হয়েছে।")
 
-# ==== Run Bot ====
+# ==== Start Bot ====
 if __name__ == "__main__":
-    keep_alive()  # Flask server for uptime
+    keep_alive()
+
     loop = asyncio.get_event_loop()
 
     async def main():
