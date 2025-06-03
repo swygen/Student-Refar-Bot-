@@ -4,18 +4,11 @@ import os
 from datetime import datetime
 
 from aiogram import Bot, Dispatcher, types
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from keep_alive import keep_alive  # Uptime server (যদি ব্যবহার করো)
+from keep_alive import keep_alive  # যদি তোমার প্রজেক্টে থাকে
 
 # ==== Bot Configuration ====
-TOKEN = "7581535746:AAEAe2dhpkVdfaJnDVS526hFRAGL0rLf3vI"  # তোমার বট টোকেন বসাও
-ADMIN_ID = 7647930808  # তোমার টেলিগ্রাম আইডি বসাও
-
-GROUPS = {
-    "CashShortcutBD": "https://t.me/CashShortcutBD",
-    "EarningZone0BD": "https://t.me/EarningZone0BD",
-    "EarnopediaBD": "https://t.me/EarnopediaBD"
-}
+TOKEN = "8068195499:AAGDIel94FTmiXRLe-TGwVJI63GW1y03qxo"  # তোমার বট টোকেন
+ADMIN_ID = 7647930808  # তোমার টেলিগ্রাম আইডি
 
 GROUP_IDS = [
     "-1002676258756",
@@ -23,7 +16,6 @@ GROUP_IDS = [
     "-1002414769217"
 ]
 
-# গ্রুপ আইডি ও নাম ম্যাপ (গ্রুপ যাচাইয়ের সময় ব্যবহার হবে)
 GROUP_MAP = {
     "-1002676258756": "CashShortcutBD",
     "-1002657235869": "EarningZone0BD",
@@ -34,36 +26,53 @@ bot = Bot(token=TOKEN)
 dp = Dispatcher(bot)
 DB_FILE = "database.json"
 
+
 # ==== Database Operations ====
 def load_db():
     if not os.path.exists(DB_FILE):
-        return {"users": {}, "claimed_100": []}
+        return {"users": {}, "claimed_50": [], "joined_users": []}
     try:
         with open(DB_FILE, "r") as f:
             return json.load(f)
     except json.JSONDecodeError:
-        return {"users": {}, "claimed_100": []}
+        return {"users": {}, "claimed_50": [], "joined_users": []}
+
 
 def save_db(data):
     with open(DB_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
-def get_referral_link(user_id):
-    return f"https://t.me/Student_refer_bot?start={user_id}"
 
 def format_profile(uid, data):
-    u = data["users"].get(str(uid), {})
-    return f"""👤 নাম: {u.get("name", "অজানা")}
-🆔 ইউজার আইডি: {uid}
-💰 ব্যালেন্স: {u.get("balance", 0)} টাকা
-📅 জয়েন তারিখ: {u.get("joined", "N/A")}"""
+    user = data["users"].get(str(uid), {})
+    name = user.get("name", "অজানা")
+    balance = user.get("balance", 0)
+    referrals = user.get("referrals", 0)
+    joined = user.get("joined", "N/A")
 
-# ==== Bot Commands ====
-@dp.message_handler(commands=['start'])
-async def start_command(msg: types.Message):
+    text = (
+        f"👤 নাম: {name}\n"
+        f"🆔 ইউজার আইডি: {uid}\n"
+        f"💰 ব্যালেন্স: {balance} টাকা\n"
+        f"📅 জয়েন তারিখ: {joined}\n"
+        f"✅ সফল রেফার: {referrals}"
+    )
+    return text
+
+
+def get_referral_link(user_id):
+    return f"https://t.me/Student_Refer_bot?start={user_id}"
+
+
+# ==== Handlers ====
+
+@dp.message_handler(commands=["start"])
+async def start_handler(msg: types.Message):
     uid = str(msg.from_user.id)
+    name = msg.from_user.full_name
     data = load_db()
 
+    # ইউজার ডাটাবেজে না থাকলে যোগ করো
     if uid not in data["users"]:
         ref = msg.get_args()
         if ref and ref != uid and ref in data["users"]:
@@ -71,128 +80,197 @@ async def start_command(msg: types.Message):
             data["users"][ref]["balance"] = data["users"][ref].get("balance", 0) + 50
 
         data["users"][uid] = {
-            "name": msg.from_user.full_name,
+            "name": name,
             "balance": 0,
             "joined": datetime.now().strftime("%Y-%m-%d"),
             "referrals": 0
         }
         save_db(data)
 
-    buttons = [InlineKeyboardButton(text=name, url=url) for name, url in GROUPS.items()]
-    buttons.append(InlineKeyboardButton("✅ Continue 🟢", callback_data="check_groups"))
-    keyboard = InlineKeyboardMarkup(row_width=1).add(*buttons)
+    # যদি ইউজার আগেই গ্রুপ জয়েন করে থাকে, আর join check হয়ে থাকে, তাহলে মেনু দেখাও
+    if uid in data.get("joined_users", []):
+        profile_text = format_profile(uid, data)
+        menu_text = (
+            f"স্বাগতম, {name}!\n\n"
+            f"{profile_text}\n\n"
+            "📄 প্রোফাইল দেখতে /profile\n"
+            "📣 রেফার করতে /refer\n"
+            "💳 উত্তোলন করতে /withdraw\n"
+            "🎁 ফ্রি ৫০ টাকা পেতে /free50\n"
+            "📢 নোটিশ পেতে /notice\n"
+            "🆘 সাপোর্ট পেতে /support"
+        )
+        await msg.answer(menu_text)
+        return
 
-    await msg.answer("🔰 প্রথমে নিচের গ্রুপগুলোতে যোগ দিন:", reply_markup=keyboard)
-
-@dp.callback_query_handler(lambda c: c.data == "check_groups")
-async def check_groups(call: types.CallbackQuery):
-    user_id = call.from_user.id
-    not_joined_groups = []
-
+    # গ্রুপ জয়েন চেক করো
+    not_joined = []
     for gid in GROUP_IDS:
         try:
-            member = await bot.get_chat_member(gid, user_id)
+            member = await bot.get_chat_member(gid, msg.from_user.id)
             if member.status not in ["member", "administrator", "creator"]:
-                not_joined_groups.append(gid)
+                not_joined.append(GROUP_MAP.get(gid, "অজানা গ্রুপ"))
         except Exception:
-            not_joined_groups.append(gid)
+            not_joined.append(GROUP_MAP.get(gid, "অজানা গ্রুপ"))
 
-    if not_joined_groups:
-        groups_names = [GROUP_MAP.get(gid, "অজানা গ্রুপ") for gid in not_joined_groups]
-        await call.message.edit_text(
-            "❌ অনুগ্রহ করে নিচের সবগুলো গ্রুপে জয়েন করুন এবং পুনরায় চেষ্টা করুন:\n" +
-            "\n".join(f"• {name}" for name in groups_names)
+    if not_joined:
+        await msg.answer(
+            f"প্রিয় {name}, আপনি নিচের গ্রুপগুলোতে জয়েন করুন:\n" +
+            "\n".join(f"• {g}" for g in not_joined) +
+            "\n\nজয়েন করার পর আবার /start দিন।"
         )
-    else:
-        keyboard = InlineKeyboardMarkup(row_width=2).add(
-            InlineKeyboardButton("📄 প্রোফাইল", callback_data="profile"),
-            InlineKeyboardButton("📣 রেফার", callback_data="refer"),
-            InlineKeyboardButton("💳 উত্তোলন", callback_data="withdraw"),
-            InlineKeyboardButton("🎁 ফ্রি ৫০ টাকা", callback_data="free100"),
-            InlineKeyboardButton("📢 নোটিশ", callback_data="notice"),
-            InlineKeyboardButton("🆘 সাপোর্ট", callback_data="support")
-        )
-        await call.message.edit_text("✅ সফলভাবে যুক্ত হয়েছেন! মেনু থেকে অপশন বেছে নিন:", reply_markup=keyboard)
+        return
 
-@dp.callback_query_handler(lambda c: c.data == "profile")
-async def profile(call: types.CallbackQuery):
-    data = load_db()
-    await call.message.edit_text(format_profile(call.from_user.id, data))
+    # জয়েন চেক সফল হলে ডাটাবেজে যোগ করো
+    if uid not in data.get("joined_users", []):
+        data.setdefault("joined_users", []).append(uid)
+        save_db(data)
 
-@dp.callback_query_handler(lambda c: c.data == "refer")
-async def refer(call: types.CallbackQuery):
+    profile_text = format_profile(uid, data)
+    menu_text = (
+        f"ধন্যবাদ {name}, আপনি সফলভাবে সব গ্রুপে জয়েন করেছেন!\n\n"
+        f"{profile_text}\n\n"
+        "📄 প্রোফাইল দেখতে /profile\n"
+        "📣 রেফার করতে /refer\n"
+        "💳 উত্তোলন করতে /withdraw\n"
+        "🎁 ফ্রি ৫০ টাকা পেতে /free50\n"
+        "📢 নোটিশ পেতে /notice\n"
+        "🆘 সাপোর্ট পেতে /support"
+    )
+    await msg.answer(menu_text)
+
+
+@dp.message_handler(commands=["profile"])
+async def profile_handler(msg: types.Message):
+    uid = str(msg.from_user.id)
     data = load_db()
-    uid = str(call.from_user.id)
+    profile_text = format_profile(uid, data)
+    await msg.answer(profile_text)
+
+
+@dp.message_handler(commands=["refer"])
+async def refer_handler(msg: types.Message):
+    uid = str(msg.from_user.id)
+    data = load_db()
+    referrals = data["users"].get(uid, {}).get("referrals", 0)
     link = get_referral_link(uid)
-    referrals = data["users"][uid].get("referrals", 0)
-    await call.message.edit_text(f"📣 রেফার লিংক: 🔗 {link}\n✅ সফল রেফার: {referrals}")
+    await msg.answer(
+        f"📣 প্রিয় {msg.from_user.full_name},\n"
+        f"তোমার রেফারেল লিঙ্ক: {link}\n"
+        f"✅ সফল রেফার: {referrals} জন"
+    )
 
-user_withdraw_state = {}
 
-@dp.callback_query_handler(lambda c: c.data == "withdraw")
-async def withdraw(call: types.CallbackQuery):
-    uid = str(call.from_user.id)
+user_withdraw_state = set()
+
+
+@dp.message_handler(commands=["withdraw"])
+async def withdraw_handler(msg: types.Message):
+    uid = str(msg.from_user.id)
     data = load_db()
     user = data["users"].get(uid, {})
     if user.get("referrals", 0) < 20:
-        await call.message.edit_text("❗ উত্তোলনের জন্য অন্তত ২০টি রেফার লাগবে।")
+        await msg.answer(
+            f"❗ প্রিয় {msg.from_user.full_name}, উত্তোলনের জন্য অন্তত ২০ জন রেফার লাগবে। "
+            f"আপনার সফল রেফার সংখ্যা: {user.get('referrals', 0)}"
+        )
+    elif user.get("balance", 0) <= 0:
+        await msg.answer(f"❗ প্রিয় {msg.from_user.full_name}, আপনার ব্যালেন্স শূন্য।")
     else:
-        await call.message.answer("📥 আপনার বিকাশ/নগদ নম্বর পাঠান:")
-        user_withdraw_state[uid] = True
+        await msg.answer("📥 বিকাশ/নগদ নম্বর পাঠান:")
+        user_withdraw_state.add(uid)
+
 
 @dp.message_handler()
-async def handle_number(msg: types.Message):
+async def process_withdraw_number(msg: types.Message):
     uid = str(msg.from_user.id)
-    if user_withdraw_state.get(uid):
+    if uid in user_withdraw_state:
         data = load_db()
-        user = data["users"][uid]
-        await bot.send_message(
-            ADMIN_ID,
-            f"📤 উত্তোলন রিকোয়েস্ট\nনাম: {msg.from_user.full_name}\nID: {uid}\nনম্বর: {msg.text}\nপরিমাণ: {user['balance']} টাকা"
+        user = data["users"].get(uid, {})
+        amount = user.get("balance", 0)
+
+        if amount <= 0:
+            await msg.answer("❗ আপনার ব্যালেন্স শূন্য বা অবৈধ।")
+            user_withdraw_state.discard(uid)
+            return
+
+        text = (
+            f"📤 নতুন উত্তোলন রিকোয়েস্ট:\n"
+            f"নাম: {msg.from_user.full_name}\n"
+            f"ID: {uid}\n"
+            f"বিকাশ/নগদ নম্বর: {msg.text}\n"
+            f"পরিমাণ: {amount} টাকা"
         )
+        await bot.send_message(ADMIN_ID, text)
         user["balance"] = 0
         save_db(data)
-        await msg.answer("✅ রিকোয়েস্ট গ্রহণ করা হয়েছে।")
-        user_withdraw_state.pop(uid)
+        await msg.answer("✅ রিকোয়েস্ট গ্রহণ করা হয়েছে। ধন্যবাদ!")
+        user_withdraw_state.discard(uid)
 
-@dp.callback_query_handler(lambda c: c.data == "notice")
-async def notice(call: types.CallbackQuery):
-    await call.message.edit_text("📌 নিয়মিতভাবে গ্রুপগুলোতে সক্রিয় থাকুন।")
 
-@dp.callback_query_handler(lambda c: c.data == "support")
-async def support(call: types.CallbackQuery):
-    await call.message.edit_text("🆘 সাপোর্টের জন্য যোগাযোগ করুন: @YourSupportUsername")
-
-@dp.callback_query_handler(lambda c: c.data == "free100")
-async def free100(call: types.CallbackQuery):
+@dp.message_handler(commands=["free50"])
+async def free50_handler(msg: types.Message):
+    uid = str(msg.from_user.id)
     data = load_db()
-    uid = str(call.from_user.id)
-    if uid in data["claimed_100"]:
-        await call.message.edit_text("❌ আপনি এই অফারটি ইতিমধ্যে গ্রহণ করেছেন।")
+
+    if uid in data.get("claimed_50", []):
+        await msg.answer("❌ আপনি ইতিমধ্যে ফ্রি ৫০ টাকা ক্লেইম করেছেন।")
         return
 
-    keyboard = InlineKeyboardMarkup().add(
-        InlineKeyboardButton("🌐 Visit Website", url="http://invest-sure.netlify.app"),
-        InlineKeyboardButton("✅ Submit", callback_data="submit100")
+    # এখানে ওয়েবসাইট লিংক দেখাও এবং ক্লেইম করার নির্দেশ দাও
+    text = (
+        f"🎁 প্রিয় {msg.from_user.full_name}, ফ্রি ৫০ টাকা পেতে নিচের ওয়েবসাইটে গিয়ে "
+        "রেজিস্ট্রেশন সম্পন্ন করুন।\n\n"
+        "ওয়েবসাইট: http://invest-sure.netlify.app\n\n"
+        "রেজিস্ট্রেশন শেষ হলে নিচের কমান্ড দিয়ে ক্লেইম করুন:\n"
+        "/claim50"
     )
-    await call.message.answer("🎁 ওয়েবসাইটে গিয়ে রেজিস্ট্রেশন সম্পন্ন করে Submit দিন:", reply_markup=keyboard)
+    await msg.answer(text)
 
-@dp.callback_query_handler(lambda c: c.data == "submit100")
-async def submit100(call: types.CallbackQuery):
+
+@dp.message_handler(commands=["claim50"])
+async def claim50_handler(msg: types.Message):
+    uid = str(msg.from_user.id)
     data = load_db()
-    uid = str(call.from_user.id)
-    if uid in data["claimed_100"]:
-        await call.message.edit_text("❌ আপনি ইতিমধ্যে ক্লেইম করেছেন।")
+
+    if uid in data.get("claimed_50", []):
+        await msg.answer("❌ আপনি ইতিমধ্যে ফ্রি ৫০ টাকা ক্লেইম করেছেন।")
         return
 
-    data["claimed_100"].append(uid)
-    data["users"][uid]["balance"] += 50
+    data.setdefault("claimed_50", []).append(uid)
+    if uid in data["users"]:
+        data["users"][uid]["balance"] = data["users"][uid].get("balance", 0) + 50
+    else:
+        data["users"][uid] = {
+            "name": msg.from_user.full_name,
+            "balance": 50,
+            "joined": datetime.now().strftime("%Y-%m-%d"),
+            "referrals": 0
+        }
     save_db(data)
-    await call.message.edit_text("✅ ৫০ টাকা ব্যালেন্সে যোগ হয়েছে।")
+
+    await msg.answer(
+        f"✅ প্রিয় {msg.from_user.full_name}, আপনার ব্যালেন্সে ৫০ টাকা যোগ হয়েছে!"
+    )
+
+
+@dp.message_handler(commands=["notice"])
+async def notice_handler(msg: types.Message):
+    await msg.answer(
+        "📢 নিয়মিতভাবে গ্রুপগুলোতে সক্রিয় থাকুন এবং নতুন আপডেট পেতে আমাদের সঙ্গে থাকুন।"
+    )
+
+
+@dp.message_handler(commands=["support"])
+async def support_handler(msg: types.Message):
+    await msg.answer(
+        "🆘 সাপোর্টের জন্য যোগাযোগ করুন: @CashShortcutAdmin"
+    )
+
 
 # ==== Start Bot ====
 if __name__ == "__main__":
-    keep_alive()  # যদি রেপ্লিট বা অন্য সার্ভার ইউজ করো, না হলে বাদ দিও
+    keep_alive()  # যদি দরকার না হয়, তাহলে মুছে ফেলো
 
     loop = asyncio.get_event_loop()
 
