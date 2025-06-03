@@ -4,19 +4,16 @@ import os
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from aiogram.utils import executor
-from keep_alive import keep_alive  # যদি Replit বা অনলাইন সার্ভারে চালাও
+from keep_alive import keep_alive  # Flask সার্ভার চালানোর জন্য
 
-# 🔐 Bot Configuration
-TOKEN = "8147835055:AAH9L0JFtwZLPx6mJ37eyxnDUxM49bgnfm8"  # <-- এখানেই তোমার BotFather থেকে পাওয়া টোকেন বসাও
-ADMIN_ID = 7647930808  # <-- তোমার Telegram ID
+# ==== Bot Config ====
+TOKEN = "8067498359:AAEwY3O6A2CVueEm4LKSIaMp4F__ypL6ZdI"  # এখানে তোমার BotFather token বসাও
+ADMIN_ID = 7647930808  # তোমার Telegram ID (যেখানে উত্তোলন মেসেজ যাবে)
 GROUP_IDS = ['-1002414769217', '-1002676258756', '-1002657235869']
 
-# 🤖 Initialize Bot and Dispatcher
 bot = Bot(token=TOKEN)
 dp = Dispatcher(bot)
 
-# 📁 Database
 DB_FILE = "database.json"
 
 def load_db():
@@ -105,6 +102,9 @@ async def refer(call: types.CallbackQuery):
 
 ✅ মোট সফল রেফার: {u.get('referrals', 0)} """)
 
+# ====== Withdraw Request Handling ======
+user_withdraw_state = {}
+
 @dp.callback_query_handler(lambda c: c.data == "withdraw")
 async def withdraw(call: types.CallbackQuery):
     data = load_db()
@@ -115,15 +115,19 @@ async def withdraw(call: types.CallbackQuery):
         await call.message.edit_text("❗ উত্তোলনের জন্য ন্যূনতম ২০টি সফল রেফার প্রয়োজন।")
     else:
         await call.message.answer("💳 আপনার বিকাশ/নগদ নম্বর পাঠান:")
+        user_withdraw_state[uid] = True
 
-        @dp.message_handler(lambda message: message.chat.id == call.from_user.id)
-        async def get_number(msg: types.Message):
-            data = load_db()
-            u = data["users"][uid]
-            await bot.send_message(ADMIN_ID, f"📥 উত্তোলন রিকোয়েস্ট:\n\nUser: {msg.from_user.full_name}\nID: {msg.from_user.id}\nNumber: {msg.text}\nAmount: {u.get('balance')} টাকা")
-            u["balance"] = 0
-            save_db(data)
-            await msg.answer("✅ উত্তোলন রিকোয়েস্ট সফলভাবে গ্রহণ করা হয়েছে।")
+@dp.message_handler()
+async def handle_withdraw_number(msg: types.Message):
+    uid = str(msg.from_user.id)
+    if user_withdraw_state.get(uid):
+        data = load_db()
+        u = data["users"][uid]
+        await bot.send_message(ADMIN_ID, f"📥 উত্তোলন রিকোয়েস্ট:\n\nUser: {msg.from_user.full_name}\nID: {msg.from_user.id}\nNumber: {msg.text}\nAmount: {u.get('balance')} টাকা")
+        u["balance"] = 0
+        save_db(data)
+        await msg.answer("✅ উত্তোলন রিকোয়েস্ট সফলভাবে গ্রহণ করা হয়েছে।")
+        user_withdraw_state.pop(uid)
 
 @dp.callback_query_handler(lambda c: c.data == "notice")
 async def notice(call: types.CallbackQuery):
@@ -164,9 +168,9 @@ async def submit100(call: types.CallbackQuery):
     save_db(data)
     await call.message.edit_text("✅ সফলভাবে ৫০ টাকা আপনার একাউন্টে যোগ হয়েছে।")
 
-# ✅ Start Bot
+# ==== Run Bot ====
 if __name__ == "__main__":
-    keep_alive()  # Replit/online hosting support (must be defined in keep_alive.py)
+    keep_alive()  # Flask server চালু (Render/Replit এর জন্য)
     loop = asyncio.get_event_loop()
 
     async def main():
