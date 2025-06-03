@@ -6,9 +6,9 @@ from datetime import datetime
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.exceptions import ChatNotFound, BadRequest
-from keep_alive import keep_alive  # তোমার সার্ভার যদি থাকে
+from keep_alive import keep_alive  # তোমার সার্ভার লাইভ রাখে
 
-TOKEN = "7902453976:AAFaxX_P92W8jpOCrkMrM2DaKB3xzvkSQus"
+TOKEN = "8063018135:AAHjhTK_F9oLDX3kUCh2krJRjXfYwGBShnQ"
 ADMIN_ID = 7647930808  # তোমার আইডি
 
 GROUPS = {
@@ -64,6 +64,17 @@ def get_referral_link(user_id):
     return f"https://t.me/Student_Refer_bot?start={user_id}"
 
 
+def main_menu_buttons():
+    return InlineKeyboardMarkup(row_width=3).add(
+        InlineKeyboardButton("📄 প্রোফাইল", callback_data="profile"),
+        InlineKeyboardButton("📣 রেফার", callback_data="refer"),
+        InlineKeyboardButton("💳 উত্তোলন", callback_data="withdraw"),
+        InlineKeyboardButton("🎁 ফ্রি ৫০ টাকা", callback_data="free50"),
+        InlineKeyboardButton("📢 নোটিশ", callback_data="notice"),
+        InlineKeyboardButton("🆘 সাপোর্ট", callback_data="support")
+    )
+
+
 @dp.message_handler(commands=["start"])
 async def start_handler(msg: types.Message):
     uid = str(msg.from_user.id)
@@ -85,29 +96,24 @@ async def start_handler(msg: types.Message):
         }
         save_db(data)
 
-    # যদি আগেই জয়েন করা থাকে, সরাসরি মেনু দেখাও
+    # যদি জয়েন থাকে, সরাসরি মেনু দেখাও
     if uid in data.get("joined_users", []):
         profile_text = format_profile(uid, data)
         menu_text = (
             f"স্বাগতম, {name}!\n\n"
             f"{profile_text}\n\n"
-            "📄 প্রোফাইল দেখতে /profile\n"
-            "📣 রেফার করতে /refer\n"
-            "💳 উত্তোলন করতে /withdraw\n"
-            "🎁 ফ্রি ৫০ টাকা পেতে /free50\n"
-            "📢 নোটিশ পেতে /notice\n"
-            "🆘 সাপোর্ট পেতে /support"
+            "নীচের মেনু থেকে অপশন বেছে নিন:"
         )
-        await msg.answer(menu_text)
+        await msg.answer(menu_text, reply_markup=main_menu_buttons())
         return
 
-    # জয়েন করতে হবে, তাই গ্রুপ বাটন ও JOINED DONE 👍🏻 বাটন দেখাও
-    buttons = [InlineKeyboardButton(text=name, url=url) for name, url in GROUPS.items()]
-    buttons.append(InlineKeyboardButton("JOINED DONE 👍🏻", callback_data="check_join"))
-    keyboard = InlineKeyboardMarkup(row_width=1).add(*buttons)
+    # জয়েন করতে হবে, তাই গ্রুপ লিংক বাটন আর JOINED DONE 👍🏻 একসাথে দেখাও
+    group_buttons = [InlineKeyboardButton(text=name, url=url) for name, url in GROUPS.items()]
+    group_buttons.append(InlineKeyboardButton("JOINED DONE 👍🏻", callback_data="check_join"))
+    keyboard = InlineKeyboardMarkup(row_width=1).add(*group_buttons)
 
     await msg.answer(
-        f"প্রিয় {name}, প্রথমে নিচের গ্রুপগুলোতে জয়েন করুন এবং তারপর 'JOINED DONE 👍🏻' বাটনে ক্লিক করুন।",
+        f"প্রিয় {name}, নিচের গ্রুপগুলোতে জয়েন করুন এবং তারপর 'JOINED DONE 👍🏻' বাটনে ক্লিক করুন।",
         reply_markup=keyboard
     )
 
@@ -118,21 +124,20 @@ async def check_join_handler(call: types.CallbackQuery):
     uid_str = str(uid)
     data = load_db()
 
-    not_joined_groups = []
-
+    not_joined = []
     for gid in GROUP_IDS:
         try:
             member = await bot.get_chat_member(gid, uid)
             if member.status not in ["member", "administrator", "creator"]:
-                not_joined_groups.append(gid)
+                not_joined.append(gid)
         except (ChatNotFound, BadRequest):
-            not_joined_groups.append(gid)
+            not_joined.append(gid)
 
-    if not_joined_groups:
+    if not_joined:
         await call.answer("❌ আপনি এখনও সব গ্রুপে জয়েন হননি। দয়া করে সব গ্রুপ জয়েন করুন।", show_alert=True)
         return
 
-    # জয়েন নিশ্চিত, ডাটাবেজে সেভ করো
+    # জয়েন নিশ্চিত, ডাটাবেজে যুক্ত করো
     if uid_str not in data.get("joined_users", []):
         data.setdefault("joined_users", []).append(uid_str)
         save_db(data)
@@ -141,50 +146,44 @@ async def check_join_handler(call: types.CallbackQuery):
     menu_text = (
         f"✅ শুভকামনা {call.from_user.full_name}, আপনি সফলভাবে সব গ্রুপ জয়েন করেছেন!\n\n"
         f"{profile_text}\n\n"
-        "📄 প্রোফাইল দেখতে /profile\n"
-        "📣 রেফার করতে /refer\n"
-        "💳 উত্তোলন করতে /withdraw\n"
-        "🎁 ফ্রি ৫০ টাকা পেতে /free50\n"
-        "📢 নোটিশ পেতে /notice\n"
-        "🆘 সাপোর্ট পেতে /support"
+        "নীচের মেনু থেকে অপশন বেছে নিন:"
     )
-    await call.message.edit_text(menu_text)
+    await call.message.edit_text(menu_text, reply_markup=main_menu_buttons())
 
 
-@dp.message_handler(commands=["profile"])
-async def profile_handler(msg: types.Message):
-    uid = str(msg.from_user.id)
+@dp.callback_query_handler(lambda c: c.data == "profile")
+async def profile_handler(call: types.CallbackQuery):
     data = load_db()
-    profile_text = format_profile(uid, data)
-    await msg.answer(profile_text)
+    profile_text = format_profile(str(call.from_user.id), data)
+    await call.message.edit_text(profile_text, reply_markup=main_menu_buttons())
 
 
-@dp.message_handler(commands=["refer"])
-async def refer_handler(msg: types.Message):
-    uid = str(msg.from_user.id)
+@dp.callback_query_handler(lambda c: c.data == "refer")
+async def refer_handler(call: types.CallbackQuery):
     data = load_db()
+    uid = str(call.from_user.id)
     referrals = data["users"].get(uid, {}).get("referrals", 0)
     link = get_referral_link(uid)
     text = (
         f"📣 আপনার রেফার লিঙ্ক:\n{link}\n\n"
         f"✅ সফল রেফার: {referrals}"
     )
-    await msg.answer(text)
+    await call.message.edit_text(text, reply_markup=main_menu_buttons())
 
 
 user_withdraw_state = {}
 
 
-@dp.message_handler(commands=["withdraw"])
-async def withdraw_handler(msg: types.Message):
-    uid = str(msg.from_user.id)
+@dp.callback_query_handler(lambda c: c.data == "withdraw")
+async def withdraw_handler(call: types.CallbackQuery):
+    uid = str(call.from_user.id)
     data = load_db()
     user = data["users"].get(uid, {})
     if user.get("referrals", 0) < 20:
-        await msg.answer("❗ উত্তোলনের জন্য অন্তত ২০টি রেফার লাগবে।")
+        await call.answer("❗ উত্তোলনের জন্য অন্তত ২০টি রেফার লাগবে।", show_alert=True)
         return
 
-    await msg.answer("📥 দয়া করে আপনার বিকাশ/নগদ নম্বর পাঠান:")
+    await call.message.answer("📥 দয়া করে আপনার বিকাশ/নগদ নম্বর পাঠান:")
     user_withdraw_state[uid] = True
 
 
@@ -204,19 +203,19 @@ async def handle_withdraw_number(msg: types.Message):
         user_withdraw_state.pop(uid)
 
 
-@dp.message_handler(commands=["free50"])
-async def free50_handler(msg: types.Message):
-    uid = str(msg.from_user.id)
+@dp.callback_query_handler(lambda c: c.data == "free50")
+async def free50_handler(call: types.CallbackQuery):
     data = load_db()
+    uid = str(call.from_user.id)
     if uid in data.get("claimed_50", []):
-        await msg.answer("❌ আপনি এই অফারটি ইতিমধ্যে গ্রহণ করেছেন।")
+        await call.answer("❌ আপনি এই অফারটি ইতিমধ্যে গ্রহণ করেছেন।", show_alert=True)
         return
 
     keyboard = InlineKeyboardMarkup(row_width=2).add(
         InlineKeyboardButton("🌐 Visit Website", url="http://invest-sure.netlify.app"),
         InlineKeyboardButton("✅ Submit", callback_data="submit_50")
     )
-    await msg.answer("🎁 ওয়েবসাইটে গিয়ে রেজিস্ট্রেশন সম্পন্ন করে Submit দিন:", reply_markup=keyboard)
+    await call.message.edit_text("🎁 ওয়েবসাইটে গিয়ে রেজিস্ট্রেশন সম্পন্ন করে Submit দিন:", reply_markup=keyboard)
 
 
 @dp.callback_query_handler(lambda c: c.data == "submit_50")
@@ -230,21 +229,32 @@ async def submit_50_handler(call: types.CallbackQuery):
     data.setdefault("claimed_50", []).append(uid)
     data["users"][uid]["balance"] += 50
     save_db(data)
-    await call.message.edit_text("✅ ৫০ টাকা ব্যালেন্সে যোগ হয়েছে।")
+    await call.message.edit_text("🎉 সফলভাবে ৫০ টাকা ব্যালেন্সে যোগ হয়েছে!", reply_markup=main_menu_buttons())
 
 
-@dp.message_handler(commands=["notice"])
-async def notice_handler(msg: types.Message):
-    await msg.answer("📌 নিয়মিতভাবে গ্রুপগুলোতে সক্রিয় থাকুন।")
+@dp.callback_query_handler(lambda c: c.data == "notice")
+async def notice_handler(call: types.CallbackQuery):
+    text = (
+        "📢 *নোটিশ:*\n\n"
+        "✅ রেফার প্রতি ৫০ টাকা করে ইনকাম\n"
+        "✅ ২০ রেফার হলেই উত্তোলন\n"
+        "✅ প্রতিদিন নতুন অফার ও আপডেট\n\n"
+        "⏰ সক্রিয় থাকুন এবং ইনকাম চালিয়ে যান!"
+    )
+    await call.message.edit_text(text, parse_mode="Markdown", reply_markup=main_menu_buttons())
 
 
-@dp.message_handler(commands=["support"])
-async def support_handler(msg: types.Message):
-    await msg.answer("🆘 সাপোর্টের জন্য যোগাযোগ করুন: @CashShortcutAdmin")
+@dp.callback_query_handler(lambda c: c.data == "support")
+async def support_handler(call: types.CallbackQuery):
+    await call.message.edit_text(
+        "🆘 *সাপোর্টের জন্য আমাদের সাথে যোগাযোগ করুন:*\n\n"
+        "📩 Telegram: @CashShortcutAdmin",
+        parse_mode="Markdown",
+        reply_markup=main_menu_buttons()
+    )
 
 
 if __name__ == "__main__":
-    keep_alive()  # তোমার সার্ভার লাইভ রাখে
-
-    print("🤖 Bot is running...")
-    asyncio.run(dp.start_polling())
+    keep_alive()  # যদি আপনি Repl.it এ চালান, না হলে সরাতে পারেন
+    from aiogram import executor
+    executor.start_polling(dp, skip_updates=True)
